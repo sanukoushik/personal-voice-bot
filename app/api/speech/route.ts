@@ -46,7 +46,10 @@ export async function POST(request: Request) {
   if (!upstream.ok || !upstream.body) {
     const reason = await upstream.text();
     console.error("Groq speech response error:", upstream.status, reason);
-    return Response.json({ error: "Speech generation failed." }, { status: 502 });
+    return Response.json(
+      { error: "Speech generation failed." },
+      { status: upstream.status === 429 ? 429 : 502 },
+    );
   }
 
   return new Response(upstream.body, {

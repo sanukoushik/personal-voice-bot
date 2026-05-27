@@ -46,7 +46,23 @@ const initialMessage: Message = {
 const MAX_SPEECH_CHUNK_LENGTH = 200;
 const FALLBACK_VOICE_STORAGE_KEY = "sanu-fallback-voice";
 const MALE_VOICE_NAME_PATTERN =
-  /(male|daniel|david|james|mark|ravi|george|aaron|arthur|fred|oliver|thomas|alex|lee|rishi)/i;
+  /(\bmale\b|daniel|david|james|mark|ravi|george|aaron|arthur|fred|oliver|thomas|alex|lee|rishi)/i;
+
+function readStoredVoiceName() {
+  try {
+    return window.localStorage.getItem(FALLBACK_VOICE_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function storeVoiceName(name: string) {
+  try {
+    window.localStorage.setItem(FALLBACK_VOICE_STORAGE_KEY, name);
+  } catch {
+    // Voice selection still applies for this session when storage is unavailable.
+  }
+}
 
 function splitForSpeech(text: string) {
   const cleanText = text.replace(/\s+/g, " ").trim();
@@ -119,11 +135,13 @@ export default function Home() {
   const threadRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const cancelAudioRef = useRef<(() => void) | null>(null);
+  const cancelDeviceSpeechRef = useRef<(() => void) | null>(null);
   const playbackTokenRef = useRef(0);
   const speechQueueRef = useRef<string[]>([]);
   const processingSpeechRef = useRef(false);
   const speechRequestRef = useRef<AbortController | null>(null);
   const deviceFallbackTokenRef = useRef<number | null>(null);
+  const speechRateLimitUntilRef = useRef(0);
   const fallbackVoiceNameRef = useRef("");
   const mutedRef = useRef(muted);
 
@@ -150,7 +168,7 @@ export default function Home() {
       setBrowserVoices(voices);
       setFallbackVoiceName((current) => {
         if (current && voices.some((voice) => voice.name === current)) return current;
-        const saved = window.localStorage.getItem(FALLBACK_VOICE_STORAGE_KEY);
+        const saved = readStoredVoiceName();
         const selected =
           saved && voices.some((voice) => voice.name === saved)
             ? saved
@@ -168,6 +186,7 @@ export default function Home() {
       speechQueueRef.current = [];
       speechRequestRef.current?.abort();
       cancelAudioRef.current?.();
+      cancelDeviceSpeechRef.current?.();
       audioRef.current?.pause();
       playbackTokenRef.current += 1;
       window.speechSynthesis?.cancel();
@@ -191,6 +210,8 @@ export default function Home() {
     speechRequestRef.current = null;
     cancelAudioRef.current?.();
     cancelAudioRef.current = null;
+    cancelDeviceSpeechRef.current?.();
+    cancelDeviceSpeechRef.current = null;
     audioRef.current?.pause();
     audioRef.current = null;
     window.speechSynthesis?.cancel();
@@ -256,15 +277,26 @@ export default function Home() {
       utterance.voice = selectedVoice;
       utterance.rate = 0.97;
       utterance.pitch = 0.86;
-      utterance.onend = () => resolve();
-      utterance.onerror = () => resolve();
+      const finish = () => {
+        if (cancelDeviceSpeechRef.current === finish) {
+          cancelDeviceSpeechRef.current = null;
+        }
+        resolve();
+      };
+      cancelDeviceSpeechRef.current = finish;
+      utterance.onend = finish;
+      utterance.onerror = finish;
       window.speechSynthesis.speak(utterance);
     });
   };
 
   const playSpeechChunk = async (text: string, token: number) => {
     if (mutedRef.current || token !== playbackTokenRef.current) return;
-    if (deviceFallbackTokenRef.current === token) {
+    if (
+      deviceFallbackTokenRef.current === token ||
+      speechRateLimitUntilRef.current > Date.now()
+    ) {
+      deviceFallbackTokenRef.current = token;
       await speakWithDeviceVoice(text, token);
       return;
     }
@@ -278,6 +310,9 @@ export default function Home() {
         body: JSON.stringify({ input: text }),
         signal: controller.signal,
       });
+      if (response.status === 429) {
+        speechRateLimitUntilRef.current = Date.now() + 60_000;
+      }
       if (!response.ok) throw new Error("Generated voice unavailable.");
 
       const url = URL.createObjectURL(await response.blob());
@@ -335,7 +370,15 @@ export default function Home() {
 
   const queueSpeech = (chunks: string[], token: number) => {
     if (mutedRef.current || token !== playbackTokenRef.current || !chunks.length) return;
-    speechQueueRef.current.push(...chunks);
+    for (const chunk of chunks) {
+      const lastIndex = speechQueueRef.current.length - 1;
+      const pending = speechQueueRef.current[lastIndex];
+      if (pending && `${pending} ${chunk}`.length <= MAX_SPEECH_CHUNK_LENGTH) {
+        speechQueueRef.current[lastIndex] = `${pending} ${chunk}`;
+      } else {
+        speechQueueRef.current.push(chunk);
+      }
+    }
     void processSpeechQueue(token);
   };
 
@@ -602,7 +645,7 @@ export default function Home() {
                 const name = event.target.value;
                 fallbackVoiceNameRef.current = name;
                 setFallbackVoiceName(name);
-                window.localStorage.setItem(FALLBACK_VOICE_STORAGE_KEY, name);
+                storeVoiceName(name);
               }}
             >
               {browserVoices.map((voice) => (
