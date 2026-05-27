@@ -33,7 +33,7 @@ export async function POST(request: Request) {
       },
       body: JSON.stringify({
         model: process.env.GROQ_TTS_MODEL || "canopylabs/orpheus-v1-english",
-        voice: process.env.GROQ_TTS_VOICE || "hannah",
+        voice: process.env.GROQ_TTS_VOICE || "austin",
         input,
         response_format: "wav",
       }),
