@@ -14,15 +14,16 @@ Add a Groq API key to `.env.local` before chatting and generated voice playback:
 
 ```env
 GROQ_API_KEY=your_groq_api_key_here
-# Optional: change the conversational voice (hannah, autumn, diana, austin, daniel, or troy).
-# GROQ_TTS_VOICE=hannah
+# Optional: choose a male conversational voice (austin, daniel, or troy).
+# Female voice options are hannah, autumn, and diana.
+GROQ_TTS_VOICE=daniel
 ```
 
 The app uses Groq's `llama-3.1-8b-instant` by default for a fast conversational experience. Set `GROQ_MODEL` to override the model.
 
 ## Deploy
 
-Deploy the repository to Vercel and add `GROQ_API_KEY` in the project environment variables. Responses use Groq Orpheus generated speech for a natural conversational voice, with browser speech as a fallback. Browser voice recognition works best in Chrome or Edge over HTTPS; the typed chat input remains available when recognition is unsupported.
+Deploy the repository to Vercel and add `GROQ_API_KEY` and `GROQ_TTS_VOICE=daniel` in the project environment variables. Responses use Groq Orpheus generated speech for a natural conversational voice, with browser speech as a fallback. Browser fallback voice availability varies by device; when a male voice is installed, the app prefers it. Browser voice recognition works best in Chrome or Edge over HTTPS; the typed chat input remains available when recognition is unsupported.
 
 ## Experience
 

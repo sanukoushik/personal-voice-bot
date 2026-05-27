@@ -181,7 +181,15 @@ export default function Home() {
         voices.find(
           (voice) =>
             voice.lang.startsWith("en") &&
-            /(Google|Microsoft|Samantha|Natural)/i.test(voice.name),
+            /(Daniel|David|James|Mark|Microsoft Ravi|Microsoft George|Google UK English Male|Male)/i.test(
+              voice.name,
+            ),
+        ) ??
+        voices.find(
+          (voice) =>
+            voice.lang.startsWith("en") &&
+            /(Google|Microsoft|Natural)/i.test(voice.name) &&
+            !/(Samantha|Zira|Female)/i.test(voice.name),
         ) ??
         voices.find((voice) => voice.lang.startsWith("en")) ??
         null;
