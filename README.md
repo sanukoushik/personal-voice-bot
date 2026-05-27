@@ -1,4 +1,4 @@
-# Sanu Voice Interview
+# Sanu's AI Clone
 
 A low-friction voice-first AI representation of Sanu, built for the 100x Stage 1 interview submission. Visitors can speak or type questions, see a streamed response, and hear the answer spoken aloud by their browser.
 
