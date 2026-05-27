@@ -44,6 +44,9 @@ const initialMessage: Message = {
 };
 
 const MAX_SPEECH_CHUNK_LENGTH = 200;
+const FALLBACK_VOICE_STORAGE_KEY = "sanu-fallback-voice";
+const MALE_VOICE_NAME_PATTERN =
+  /(male|daniel|david|james|mark|ravi|george|aaron|arthur|fred|oliver|thomas|alex|lee|rishi)/i;
 
 function splitForSpeech(text: string) {
   const cleanText = text.replace(/\s+/g, " ").trim();
@@ -109,6 +112,9 @@ export default function Home() {
   const [muted, setMuted] = useState(false);
   const [error, setError] = useState("");
   const [voiceSupported, setVoiceSupported] = useState(true);
+  const [browserVoices, setBrowserVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [fallbackVoiceName, setFallbackVoiceName] = useState("");
+  const [isUsingDeviceVoice, setIsUsingDeviceVoice] = useState(false);
   const recognitionRef = useRef<Recognition | null>(null);
   const threadRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -117,6 +123,8 @@ export default function Home() {
   const speechQueueRef = useRef<string[]>([]);
   const processingSpeechRef = useRef(false);
   const speechRequestRef = useRef<AbortController | null>(null);
+  const deviceFallbackTokenRef = useRef<number | null>(null);
+  const fallbackVoiceNameRef = useRef("");
   const mutedRef = useRef(muted);
 
   useEffect(() => {
@@ -131,6 +139,30 @@ export default function Home() {
     setVoiceSupported(
       Boolean(speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition),
     );
+
+    const loadVoices = () => {
+      if (!("speechSynthesis" in window)) return;
+      const voices = window.speechSynthesis.getVoices().filter((voice) =>
+        voice.lang.startsWith("en"),
+      );
+      if (!voices.length) return;
+
+      setBrowserVoices(voices);
+      setFallbackVoiceName((current) => {
+        if (current && voices.some((voice) => voice.name === current)) return current;
+        const saved = window.localStorage.getItem(FALLBACK_VOICE_STORAGE_KEY);
+        const selected =
+          saved && voices.some((voice) => voice.name === saved)
+            ? saved
+            : (voices.find((voice) => MALE_VOICE_NAME_PATTERN.test(voice.name))?.name ??
+              voices[0].name);
+        fallbackVoiceNameRef.current = selected;
+        return selected;
+      });
+    };
+
+    loadVoices();
+    window.speechSynthesis?.addEventListener("voiceschanged", loadVoices);
     return () => {
       recognitionRef.current?.stop();
       speechQueueRef.current = [];
@@ -139,6 +171,7 @@ export default function Home() {
       audioRef.current?.pause();
       playbackTokenRef.current += 1;
       window.speechSynthesis?.cancel();
+      window.speechSynthesis?.removeEventListener("voiceschanged", loadVoices);
     };
   }, []);
 
@@ -152,6 +185,7 @@ export default function Home() {
 
   const stopSpeaking = () => {
     playbackTokenRef.current += 1;
+    deviceFallbackTokenRef.current = null;
     speechQueueRef.current = [];
     speechRequestRef.current?.abort();
     speechRequestRef.current = null;
@@ -163,46 +197,77 @@ export default function Home() {
     setIsSpeaking(false);
   };
 
-  const speakWithBrowserVoice = (text: string, token: number) =>
-    new Promise<void>((resolve) => {
-      if (
-        mutedRef.current ||
-        token !== playbackTokenRef.current ||
-        !("speechSynthesis" in window)
-      ) {
-        resolve();
+  const getDeviceVoices = () =>
+    new Promise<SpeechSynthesisVoice[]>((resolve) => {
+      if (!("speechSynthesis" in window)) {
+        resolve([]);
         return;
       }
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 0.97;
-      utterance.pitch = 0.94;
-      const voices = window.speechSynthesis.getVoices();
-      utterance.voice =
-        voices.find(
-          (voice) =>
-            voice.lang.startsWith("en") &&
-            /(Daniel|David|James|Mark|Microsoft Ravi|Microsoft George|Google UK English Male|Male)/i.test(
-              voice.name,
-            ),
-        ) ??
-        voices.find(
-          (voice) =>
-            voice.lang.startsWith("en") &&
-            /(Google|Microsoft|Natural)/i.test(voice.name) &&
-            !/(Samantha|Zira|Female)/i.test(voice.name),
-        ) ??
-        voices.find((voice) => voice.lang.startsWith("en")) ??
-        null;
-      utterance.onstart = () => {
-        if (token === playbackTokenRef.current) setIsSpeaking(true);
+      const existing = window.speechSynthesis
+        .getVoices()
+        .filter((voice) => voice.lang.startsWith("en"));
+      if (existing.length) {
+        resolve(existing);
+        return;
+      }
+
+      const timeout = window.setTimeout(() => {
+        window.speechSynthesis.removeEventListener("voiceschanged", load);
+        resolve(
+          window.speechSynthesis.getVoices().filter((voice) => voice.lang.startsWith("en")),
+        );
+      }, 800);
+      const load = () => {
+        const voices = window.speechSynthesis
+          .getVoices()
+          .filter((voice) => voice.lang.startsWith("en"));
+        if (!voices.length) return;
+        window.clearTimeout(timeout);
+        window.speechSynthesis.removeEventListener("voiceschanged", load);
+        resolve(voices);
       };
+      window.speechSynthesis.addEventListener("voiceschanged", load);
+    });
+
+  const speakWithDeviceVoice = async (text: string, token: number) => {
+    if (mutedRef.current || token !== playbackTokenRef.current) return;
+    if (!("speechSynthesis" in window)) {
+      setError("Generated voice is unavailable and this browser has no speech fallback.");
+      return;
+    }
+
+    const voices = await getDeviceVoices();
+    if (mutedRef.current || token !== playbackTokenRef.current) return;
+    const selectedVoice =
+      voices.find((voice) => voice.name === fallbackVoiceNameRef.current) ??
+      voices.find((voice) => MALE_VOICE_NAME_PATTERN.test(voice.name)) ??
+      voices[0] ??
+      null;
+
+    setBrowserVoices(voices);
+    if (selectedVoice && !fallbackVoiceNameRef.current) {
+      fallbackVoiceNameRef.current = selectedVoice.name;
+      setFallbackVoiceName(selectedVoice.name);
+    }
+    setIsUsingDeviceVoice(true);
+
+    await new Promise<void>((resolve) => {
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.voice = selectedVoice;
+      utterance.rate = 0.97;
+      utterance.pitch = 0.86;
       utterance.onend = () => resolve();
       utterance.onerror = () => resolve();
       window.speechSynthesis.speak(utterance);
     });
+  };
 
   const playSpeechChunk = async (text: string, token: number) => {
     if (mutedRef.current || token !== playbackTokenRef.current) return;
+    if (deviceFallbackTokenRef.current === token) {
+      await speakWithDeviceVoice(text, token);
+      return;
+    }
 
     const controller = new AbortController();
     speechRequestRef.current = controller;
@@ -220,6 +285,7 @@ export default function Home() {
         URL.revokeObjectURL(url);
         return;
       }
+      setIsUsingDeviceVoice(false);
       const audio = new Audio(url);
       audioRef.current = audio;
       try {
@@ -235,7 +301,8 @@ export default function Home() {
       }
     } catch {
       if (controller.signal.aborted || token !== playbackTokenRef.current) return;
-      await speakWithBrowserVoice(text, token);
+      deviceFallbackTokenRef.current = token;
+      await speakWithDeviceVoice(text, token);
     } finally {
       if (speechRequestRef.current === controller) speechRequestRef.current = null;
     }
@@ -277,6 +344,7 @@ export default function Home() {
     if (!cleanQuestion || isLoading) return;
 
     setError("");
+    setIsUsingDeviceVoice(false);
     setDraft("");
     setIsLoading(true);
     stopSpeaking();
@@ -522,8 +590,29 @@ export default function Home() {
         <div className="status" data-mode={status.toLowerCase()}>
           <span className="pulse" />
           {status}
+          {isUsingDeviceVoice && " - device fallback"}
           {!voiceSupported && " - type to chat in this browser"}
         </div>
+        {browserVoices.length > 0 && (
+          <label className="fallback-voice">
+            Device fallback voice
+            <select
+              value={fallbackVoiceName}
+              onChange={(event) => {
+                const name = event.target.value;
+                fallbackVoiceNameRef.current = name;
+                setFallbackVoiceName(name);
+                window.localStorage.setItem(FALLBACK_VOICE_STORAGE_KEY, name);
+              }}
+            >
+              {browserVoices.map((voice) => (
+                <option key={voice.name} value={voice.name}>
+                  {voice.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         {error && <p className="error">{error}</p>}
       </section>
     </main>

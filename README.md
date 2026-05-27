@@ -23,11 +23,11 @@ The app uses Groq's `llama-3.1-8b-instant` by default for a fast conversational 
 
 ## Deploy
 
-Deploy the repository to Vercel and add `GROQ_API_KEY` and `GROQ_TTS_VOICE=daniel` in the project environment variables. Responses use Groq Orpheus generated speech for a natural conversational voice, with browser speech as a fallback. Browser fallback voice availability varies by device; when a male voice is installed, the app prefers it. Browser voice recognition works best in Chrome or Edge over HTTPS; the typed chat input remains available when recognition is unsupported.
+Deploy the repository to Vercel and add `GROQ_API_KEY` and `GROQ_TTS_VOICE=daniel` in the project environment variables. Responses prefer the configured Groq Orpheus male voice. If Groq speech is rate-limited or unavailable, the app uses a device fallback voice and lets the visitor choose from English voices installed on that device. Browser voice recognition works best in Chrome or Edge over HTTPS; the typed chat input remains available when recognition is unsupported.
 
 ## Experience
 
 - Browser speech recognition for fast voice questions
 - Streamed Groq chat-completion answers shaped by Sanu's interview persona
-- Natural Groq Orpheus text-to-speech with browser fallback and mute control
+- Natural Groq Orpheus text-to-speech with selectable device fallback and mute control
 - Suggested interview questions and responsive dark UI

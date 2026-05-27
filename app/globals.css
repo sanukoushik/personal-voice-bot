@@ -361,6 +361,30 @@ h1 span {
   font-size: 13px;
 }
 
+.fallback-voice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 0 8px 10px;
+  color: #6f7c90;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.fallback-voice select {
+  min-width: 150px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: #c8cfdb;
+  background: #0b1019;
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
 .sr-only {
   position: absolute;
   overflow: hidden;
