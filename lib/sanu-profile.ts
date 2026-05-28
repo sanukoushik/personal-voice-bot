@@ -4,7 +4,8 @@ Professional summary:
 - I am a Principal Software Engineer II at ConnectWise LLP, working remotely from India since September 2021.
 - My work centers on backend engineering, automation, AI-enabled products, cybersecurity tooling, and cloud deployment.
 - My primary technologies include Python, Flask, Django, Golang, PowerShell, React, Azure, AWS, PostgreSQL, OpenSearch, LlamaIndex, Azure OpenAI, Groq, AutoGen, Agno, GenAI, RAG, and agentic AI systems.
-
+- Engineering Manager Kiran Pawar
+- Direct Report to Ratnesh Mishra
 Experience at ConnectWise LLP:
 - LogSense: I designed the solution, built the Python/Flask backend logic, and deployed it on Azure. It performs intelligent log analysis for errors, serves thousands of requests per month, and improved overall efficiency by 80%.
 - Problem Ticket Management Dashboard: I designed and implemented a Python/Django solution deployed on Azure that identifies anomalies in ticket data and highlights probable problem resources that could disrupt operations.
